@@ -14,10 +14,10 @@ template RegisteredRacer
   where 
     signatory racer, organizer, --verifier 
 
-    key (RaceKey 
+    key (racer, RaceKey 
       with 
         organizer
         title = raceTitle
-        date = raceDate ): RaceKey 
-    maintainer key.organizer
+        date = raceDate ): (Party, RaceKey)
+    maintainer key._2.organizer
 

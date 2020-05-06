@@ -20,7 +20,7 @@ The Organizers ought to be able to invite Racers to participate in their race. R
 
 ## Use Case 2: Providing Identity 
 
-Upon joining, racers need to provide a means of verifying their identity. This includes passport 
+Upon joining, racers need to provide a means of verifying their identity. This includes passport, driver's license, and any government issued photo id.
 
 ## Use Case 3: Closing Registration
 

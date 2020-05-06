@@ -1,0 +1,22 @@
+sdk-version: 1.0.1
+name: racing
+source: daml
+init-script: 
+parties:
+  - Alice
+  - Bob
+  - Charlie
+  - SpeedyPeepsInc
+  - IdentityFiveOh
+  - DoT
+  - Medics
+  - DoB
+  - LocalPolice
+  - CounterTerrorism
+version: 0.0.1
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+sandbox-options:
+  - --wall-clock-time

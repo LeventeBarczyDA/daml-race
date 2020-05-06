@@ -1,0 +1,23 @@
+daml 1.2 
+module Racing where 
+
+import RacingTypes
+
+template RegisteredRacer
+  with 
+    racer: Party 
+    organizer: Party 
+    --verifier: Party
+    bibNumber: BibNumber 
+    raceTitle: Text
+    raceDate: Date
+  where 
+    signatory racer, organizer, --verifier 
+
+    key (RaceKey 
+      with 
+        organizer
+        title = raceTitle
+        date = raceDate ): RaceKey 
+    maintainer key.organizer
+

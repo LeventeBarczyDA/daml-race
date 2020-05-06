@@ -1,0 +1,11 @@
+daml 1.2 
+module RacingTypes where 
+
+type BibNumber = Text
+
+data RaceKey = RaceKey
+  with 
+    title: Text 
+    organizer: Party
+    date: Date 
+  deriving (Eq, Show)

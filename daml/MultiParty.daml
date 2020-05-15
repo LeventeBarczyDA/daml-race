@@ -1,0 +1,108 @@
+daml 1.2 
+module MultiParty where 
+
+import DA.List
+
+template TrilateralContract 
+  with 
+    party1: Party
+    party2: Party 
+    party3: Party 
+    tnc: Text
+    party1Sig: Party  -- party1 initially
+    party2Sig: Party  -- party1 initially
+    party3Sig: Party  -- party1 initially
+  where 
+    signatory party1Sig, party2Sig, party3Sig
+
+    controller party2 can 
+      SignAs2: ContractId TrilateralContract 
+        do 
+          create this with party2Sig = party2
+
+    controller party3 can
+      SignAs3: ContractId TrilateralContract
+        do 
+          create this with party3Sig = party3
+
+    choice Finalize: ContractId FinalizedContract
+        with 
+          party: Party 
+      controller party 
+        do 
+          assert$ party1 == party1Sig && party2 == party2Sig && party3 == party3Sig
+          create FinalizedContract with ..
+
+template FinalizedContract 
+  with
+    party1: Party
+    party2: Party 
+    party3: Party 
+    tnc: Text
+  where 
+    signatory party1, party2, party3
+
+template MultilateralContract
+  with 
+    initiator: Party 
+    invited: [Party]
+    accepted: [Party]
+  where 
+    signatory initiator, accepted 
+    observer invited
+
+    ensure initiator `elem` accepted
+
+    choice Accept: ContractId MultilateralContract 
+        with asParty: Party 
+      controller asParty 
+        do 
+          assert$ asParty `notElem` accepted
+
+          create this 
+            with 
+              invited = delete asParty invited
+              accepted = accepted ++ [asParty]
+              
+    controller initiator can 
+      FinalizeMultilateral: ContractId FinalizedMultilateralContract 
+        do 
+          --assert$ null invited
+          create FinalizedMultilateralContract 
+            with ..
+
+template FinalizedMultilateralContract 
+  with 
+    initiator: Party 
+    accepted: [Party]
+  where 
+    signatory initiator, accepted
+
+democracy = scenario do 
+  alice <- getParty "Alice"
+  bob <- getParty "Bob"
+  charlie <- getParty "Charlie"
+  dan <- getParty "Dan"
+
+  cid <- submit alice do 
+    create MultilateralContract
+      with 
+        initiator = alice 
+        invited = [bob,charlie]
+        accepted = [alice]
+
+  cid <- submit charlie do 
+    exercise cid Accept with asParty = charlie
+
+  cid <- submit bob do 
+    exercise cid Accept with asParty = bob
+
+  -- cid <- submit alice do 
+  --   exercise cid Accept with asParty = alice
+
+  cid <- submit alice do 
+    exercise cid FinalizeMultilateral
+
+
+
+  return ()

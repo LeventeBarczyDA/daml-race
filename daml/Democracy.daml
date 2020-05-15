@@ -1,0 +1,139 @@
+daml 1.2 
+module Democracy where
+
+template Ballot 
+  with 
+    operator: Party 
+    voter: Party 
+    proposal: Text
+  where 
+    signatory operator 
+
+    controller voter can 
+      Vote: ContractId CompletedBallot
+        with 
+          yeaNay: Bool 
+        do 
+          exerciseByKey @OngoingElection (operator, proposal) RegisterVote with ..
+          create CompletedBallot 
+            with ..
+
+template CompletedBallot 
+  with 
+    operator: Party 
+    voter: Party 
+    proposal: Text 
+    yeaNay: Bool
+  where 
+    signatory operator, voter
+
+    key (operator, voter, proposal): (Party, Party, Text)
+    maintainer key._1
+
+    controller operator, voter can 
+      ContributeToTally: Bool
+        do 
+          return yeaNay
+
+template Election
+  with 
+    operator: Party 
+    voters: [Party]
+    proposal: Text
+  where 
+    signatory operator 
+    observer voters
+
+    controller operator can  
+      IssueBallots: ([ContractId Ballot], ContractId OngoingElection)
+        do 
+          ballots <- forA voters (\voter -> do 
+            create Ballot 
+              with ..)
+          ongoing <- create OngoingElection 
+            with 
+              voted = []
+              ..
+          return (ballots, ongoing)
+
+
+partitionFunctionTest = scenario do 
+  assert$ (partition (\t -> t == "bar") ["foo", "bar", "baz"]) == (["bar"], ["foo", "baz"])
+  assert$ (partition identity [True, False, True]) == ([True, True], [False])
+
+template OngoingElection
+  with 
+    operator: Party 
+    voters: [Party]
+    voted: [Party]
+    proposal: Text 
+  where 
+    signatory operator, voted
+    observer voters 
+
+    key (operator, proposal): (Party, Text)
+    maintainer key._1
+
+    choice RegisterVote: ContractId OngoingElection
+        with 
+          voter: Party
+      controller voter 
+        do 
+          assert$ voter `elem` voters
+          assert$ voter `notElem` voted
+
+          create this with voted = voter :: voted
+
+    controller operator can 
+      TallyBallots: ContractId VoteResult 
+        do 
+          tally <- forA voters (\voter -> do 
+            exerciseByKey @CompletedBallot (operator, voter, proposal) ContributeToTally)
+          let 
+            (yeas, nays) = partition identity tally 
+          create VoteResult 
+            with 
+              yeas = length yeas 
+              nays = length nays
+              ..
+
+
+ballotTest = scenario do 
+  board <- getParty "Board"
+  alice <- getParty "Alice"
+  bob <- getParty "Bob"
+  charlie <- getParty "Charlie"
+
+  election <- submit board do 
+    create Election 
+      with 
+        operator = board 
+        voters =[alice, bob, charlie]
+        proposal = "Casual Fridays"
+
+  ([aBallot, bBallot, cBallot], ongoing) <- submit board do 
+    exercise election IssueBallots
+
+  alice `submit` do 
+    exercise aBallot Vote 
+      with yeaNay = True
+
+  bob `submit` do 
+    exercise bBallot Vote 
+      with yeaNay = False 
+
+  charlie `submit` do 
+    exercise cBallot Vote 
+      with yeaNay = True
+
+  return ()
+
+template VoteResult
+  with 
+    operator: Party 
+    voters: [Party]
+    yeas: Int 
+    nays: Int 
+    proposal: Text 
+  where 
+    signatory voters, operator

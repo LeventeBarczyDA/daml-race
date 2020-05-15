@@ -7,16 +7,48 @@ import DA.List
 import DA.Date
 import DA.Time
 
-template RegisteredRacer
+-- Propose Accept 
+-- Long-lived Rights Contracts 
+-- ContractKeys
+-- Basic Iteration
+-- Async workflows
+-- Delegation of Authority, 
+-- Locking / Escrow
+
+template RacingInvitation
   with 
     racer: Party 
     organizer: Party 
-    --credIssuer: Party
+    credIssuer: Party
     bibNumber: BibNumber 
     raceTitle: Text
     raceDate: Date
   where 
-    signatory racer, organizer, --credIssuer 
+    signatory organizer
+
+    controller racer can 
+      Accept: ContractId RegisteredRacer 
+        with 
+          documentation: Text 
+        do 
+          create RegisteredRacer 
+            with
+              ..
+
+template RegisteredRacer
+  with 
+    racer: Party 
+    organizer: Party 
+    credIssuer: Party 
+    bibNumber: BibNumber 
+    raceTitle: Text
+    raceDate: Date
+    documentation: Text 
+    --locked: Bool
+  where 
+    signatory racer, organizer, --credIssuer
+
+    observer credIssuer
 
     key (racer, RaceKey 
       with 
@@ -25,3 +57,128 @@ template RegisteredRacer
         date = raceDate ): (Party, RaceKey)
     maintainer key._2.organizer
 
+    controller organizer can 
+      VerifyRacer: ContractId VerifiedRacer
+        do 
+          create VerifiedRacer 
+            with ..
+
+    controller [organizer, credIssuer] can
+      Lock: ContractId LockedRegisteredRacer 
+        do 
+          create LockedRegisteredRacer 
+            with ..
+
+    controller racer can 
+      ChangeDocumentation: ContractId RegisteredRacer 
+        with 
+          newDocumentation: Text 
+        do 
+          create this with documentation = newDocumentation
+
+template LockedRegisteredRacer 
+  with 
+    racer: Party 
+    organizer: Party 
+    credIssuer: Party 
+    bibNumber: BibNumber 
+    raceTitle: Text
+    raceDate: Date
+    documentation: Text 
+    --locked: Bool
+  where 
+    signatory racer, organizer 
+
+    controller organizer can 
+      UnlockRegisteredRacer: ContractId RegisteredRacer 
+        do  
+          create RegisteredRacer with ..
+
+    -- controller racer can 
+    --   AppealLockout: ContractId Appeal
+
+template VerifiedRacer 
+  with 
+    racer: Party 
+    organizer: Party 
+    credIssuer: Party
+    bibNumber: BibNumber 
+    raceTitle: Text
+    raceDate: Date
+    documentation: Text
+  where 
+    signatory racer, organizer --credIssuer 
+
+template DelegationToCredIssuer
+  with 
+    organizer: Party 
+    credIssuer: Party 
+    raceTitle: Text
+    raceDate: Date
+  where 
+    signatory organizer 
+
+    key (organizer, credIssuer): (Party, Party)
+    maintainer key._1
+
+    controller credIssuer can 
+      nonconsuming ProxyVerifyRacer: ContractId VerifiedRacer 
+        with 
+          registrationId: ContractId RegisteredRacer 
+        do  
+          registration <- fetch registrationId 
+          assert$ raceTitle == registration.raceTitle
+          assert$ raceDate == registration.raceDate 
+          assert$ organizer == registration.organizer
+
+          exercise registrationId VerifyRacer 
+
+      nonconsuming ProxyLockRacer: ContractId LockedRegisteredRacer 
+        with 
+          registrationId: ContractId RegisteredRacer 
+        do 
+          registration <- fetch registrationId 
+          assert$ raceTitle == registration.raceTitle
+          assert$ raceDate == registration.raceDate 
+          assert$ organizer == registration.organizer
+
+          exercise registrationId Lock
+
+test = scenario do 
+  racer <- getParty "Jack Frost"
+  organizer <- getParty "SpeedFreaks"
+  credIssuer <- getParty "UnpaidInterns"
+
+  let 
+    raceTitle = "Ultimate"
+    raceDate = fromGregorian(2021, Jan, 1)
+
+  invite <- organizer `submit` do 
+    create RacingInvitation 
+      with 
+        bibNumber = "123"
+        ..
+
+  registrationId <- racer `submit` do 
+    exercise invite Accept
+      with documentation = "Really dodgy passport"
+
+  delegation <- organizer `submit` do 
+    create DelegationToCredIssuer 
+      with ..
+
+  credIssuer `submitMustFail` do 
+    exercise registrationId Lock
+
+  organizer `submitMustFail` do 
+    exercise registrationId Lock
+
+  credIssuer `submit` do 
+    exercise delegation ProxyLockRacer 
+      with registrationId       
+
+  -- registrationId <- racer `submitMustFail` do 
+  --   exercise registrationId ChangeDocumentation
+  --     with newDocumentation = "less fake looking passport"
+
+  return ()
